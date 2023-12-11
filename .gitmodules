@@ -13,3 +13,6 @@
 [submodule "lib/v4-core"]
 	path = lib/v4-core
 	url = https://github.com/Uniswap/v4-core
+[submodule "lib/gho-core"]
+	path = lib/gho-core
+	url = https://github.com/aave/gho-core
