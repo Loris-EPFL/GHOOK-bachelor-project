@@ -7,3 +7,6 @@
 [submodule "lib/v4-periphery"]
 	path = lib/v4-periphery
 	url = https://github.com/uniswap/v4-periphery
+[submodule "lib/bungi"]
+	path = lib/bungi
+	url = https://github.com/saucepoint/bungi
