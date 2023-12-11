@@ -10,3 +10,6 @@
 [submodule "lib/bungi"]
 	path = lib/bungi
 	url = https://github.com/saucepoint/bungi
+[submodule "lib/v4-core"]
+	path = lib/v4-core
+	url = https://github.com/Uniswap/v4-core
