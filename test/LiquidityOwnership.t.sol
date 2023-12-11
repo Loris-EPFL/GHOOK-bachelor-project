@@ -19,6 +19,8 @@ import { UniswapHooksFactory } from "../../src/utils/UniswapHooksFactory.sol";
 import { BorrowHook } from "../../src/hook/BorrowHook.sol";
 import {HookMiner} from "./utils/HookMiner.sol";
 import {Hooks} from "@uniswap/v4-core/contracts/libraries/Hooks.sol";
+import {IGhoToken} from '@aave/gho/gho/interfaces/IGhoToken.sol';
+
 
 
 
@@ -65,6 +67,8 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
             HookMiner.find(address(this), flags, type(BorrowHook).creationCode, abi.encode(address(owner), address(manager)));
         deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
+
+        AddFacilitator(address(deployedHooks));
         
 
         // Create the pool
@@ -73,10 +77,9 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
 
-        token0.mint(alice, 1_000_000e18);
-        token1.mint(alice, 1_000_000e18);
-        token0.mint(bob, 1_000_000e18);
-        token1.mint(bob, 1_000_000e18);
+        _mintTokens(1000000000000000000000e18);
+        _mintTo(alice, 1000000000000000000000e18);
+        _mintTo(bob, 1000000000000000000000e18);
 
         vm.startPrank(alice);
         token0.approve(address(lpm), type(uint256).max);
@@ -90,6 +93,8 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     }
 
     
+
+    
     function _doesAddressStartWith(address _address, uint160 _prefix) private pure returns (bool) {
         return uint160(_address) / (2 ** (8 * (19))) == _prefix;
     }
@@ -99,7 +104,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function test_recipientAdd() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e4;
 
         uint256 token0Alice = token0.balanceOf(alice);
         uint256 token1Alice = token1.balanceOf(alice);
@@ -126,7 +131,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function test_recipientReadd() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e10;
 
         uint256 token0Alice = token0.balanceOf(alice);
         uint256 token1Alice = token1.balanceOf(alice);
@@ -167,7 +172,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function test_ownershipRemove() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e10;
 
         vm.prank(alice);
         lpm.modifyPosition(
@@ -205,7 +210,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function test_ownershipRebalance() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e10;
 
         vm.prank(alice);
         lpm.modifyPosition(
@@ -248,7 +253,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function test_operatorRemove() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e10;
 
         vm.prank(alice);
         lpm.modifyPosition(
@@ -291,7 +296,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function test_operatorRebalance() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e10;
 
         vm.prank(alice);
         lpm.modifyPosition(

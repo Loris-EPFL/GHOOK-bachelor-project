@@ -15,6 +15,11 @@ import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 import {TickMath} from "@uniswap/v4-core/contracts/libraries/TickMath.sol";
 import {Position as PoolPosition} from "@uniswap/v4-core/contracts/libraries/Position.sol";
 import {LiquidityHelpers} from "../src/lens/LiquidityHelpers.sol";
+import { BorrowHook } from "../../src/hook/BorrowHook.sol";
+import {HookMiner} from "./utils/HookMiner.sol";
+import {Hooks} from "@uniswap/v4-core/contracts/libraries/Hooks.sol";
+import {IGhoToken} from '@aave/gho/gho/interfaces/IGhoToken.sol';
+
 
 contract TokenFlowsTest is HookTest, Deployers {
     using PoolIdLibrary for PoolKey;
@@ -23,6 +28,8 @@ contract TokenFlowsTest is HookTest, Deployers {
 
     LiquidityPositionManager lpm;
     LiquidityHelpers helper;
+
+    BorrowHook internal deployedHooks;
 
     PoolKey poolKey;
     PoolId poolId;
@@ -39,16 +46,27 @@ contract TokenFlowsTest is HookTest, Deployers {
         token0.approve(address(lpm), type(uint256).max);
         token1.approve(address(lpm), type(uint256).max);
 
+        uint160 flags = uint160(
+           Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_MODIFY_POSITION_FLAG
+                | Hooks.AFTER_MODIFY_POSITION_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG
+        );
+        (address hookAddress, bytes32 salt) =
+            HookMiner.find(address(this), flags, type(BorrowHook).creationCode, abi.encode(address(owner), address(manager)));
+        deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
+        require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
+
+        AddFacilitator(address(deployedHooks));
+        
+
         // Create the pool
         poolKey =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(0x0)));
+            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
 
-        token0.mint(alice, 1_000_000e18);
-        token1.mint(alice, 1_000_000e18);
-        token0.mint(bob, 1_000_000e18);
-        token1.mint(bob, 1_000_000e18);
+        _mintTokens(1000000e18);
+        _mintTo(alice, 1000000000000000000000e18);
+        _mintTo(bob, 1000000000000000000000e18);
 
         vm.startPrank(alice);
         token0.approve(address(lpm), type(uint256).max);

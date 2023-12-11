@@ -14,6 +14,10 @@ import {Position, PositionId, PositionIdLibrary} from "../src/types/PositionId.s
 import {TickMath} from "@uniswap/v4-core/contracts/libraries/TickMath.sol";
 import {Position as PoolPosition} from "@uniswap/v4-core/contracts/libraries/Position.sol";
 import {LiquidityHelpers} from "../src/lens/LiquidityHelpers.sol";
+import { BorrowHook } from "../../src/hook/BorrowHook.sol";
+import {HookMiner} from "./utils/HookMiner.sol";
+import {Hooks} from "@uniswap/v4-core/contracts/libraries/Hooks.sol";
+import {IGhoToken} from '@aave/gho/gho/interfaces/IGhoToken.sol';
 
 contract LiquidityPositionManagerTest is HookTest, Deployers {
     using PoolIdLibrary for PoolKey;
@@ -22,6 +26,9 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
 
     LiquidityPositionManager lpm;
     LiquidityHelpers helper;
+
+    BorrowHook internal deployedHooks;
+
 
     PoolKey poolKey;
     PoolId poolId;
@@ -35,17 +42,36 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         token0.approve(address(lpm), type(uint256).max);
         token1.approve(address(lpm), type(uint256).max);
 
+        uint160 flags = uint160(
+           Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_MODIFY_POSITION_FLAG
+                | Hooks.AFTER_MODIFY_POSITION_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG
+        );
+        (address hookAddress, bytes32 salt) =
+            HookMiner.find(address(this), flags, type(BorrowHook).creationCode, abi.encode(address(owner), address(manager)));
+        deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
+        require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
+
+        AddFacilitator(address(deployedHooks));
+
         // Create the pool
         poolKey =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(0x0)));
+            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
+
+        _mintTokens(1000000000000000000000e18);
+
+      
     }
 
     function test_addLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e4;
+
+        console2.log("token0 balance before", token0.balanceOf(address(this)));
+        console2.log("token1 balance before", token1.balanceOf(address(this)));
+
         lpm.modifyPosition(
             address(this),
             poolKey,
@@ -63,7 +89,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_removeFullLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e4;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         assertEq(lpm.balanceOf(address(this), position.toTokenId()), liquidity);
@@ -83,7 +109,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_removePartialLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e4;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
 
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
@@ -96,7 +122,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_addPartialLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e18;
+        uint256 liquidity = 1e10;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
 
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
@@ -109,7 +135,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_expandLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        int256 liquidity = 1e18;
+        int256 liquidity = 1e10;
         addLiquidity(poolKey, tickLower, tickUpper, uint256(liquidity));
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
 

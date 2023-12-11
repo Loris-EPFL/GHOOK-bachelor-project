@@ -17,9 +17,12 @@ import { StdCheats } from "forge-std/StdCheats.sol";
 import {TestERC20} from "@uniswap/v4-core/contracts/test/TestERC20.sol";
 import {TickMath} from "@uniswap/v4-core/contracts/libraries/TickMath.sol";
 
+import {IGhoToken} from '@aave/gho/gho/interfaces/IGhoToken.sol';
+
+
 /// @notice Contract to initialize some test helpers
 /// @dev Minimal initialization. Inheriting contract should set up pools and provision liquidity
-contract HookTest is Test, PRBTest, StdCheats {
+contract HookTest is Test {
     PoolManager manager;
     PoolModifyPositionTest modifyPositionRouter;
     PoolSwapTest swapRouter;
@@ -28,6 +31,11 @@ contract HookTest is Test, PRBTest, StdCheats {
     MockERC20 token1;
     address WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address gho = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f;
+
+    address owner = 0x388C818CA8B9251b393131C08a736A67ccB19297; //address of owner of hook
+
+
 
     uint160 public constant MIN_PRICE_LIMIT = TickMath.MIN_SQRT_RATIO + 1;
     uint160 public constant MAX_PRICE_LIMIT = TickMath.MAX_SQRT_RATIO - 1;
@@ -82,9 +90,40 @@ contract HookTest is Test, PRBTest, StdCheats {
        
  
         //mint Aeth and Ausdc by depositing into pool
-        deal(WETH, msg.sender, amount);
-        deal(USDC, msg.sender, amount);
+        deal(WETH, address(this), amount);
+        deal(USDC, address(this), amount);
 
     
+    }
+
+    //helper function to mint tokens
+    function _mintTo( address recipient, uint256 amount) internal{
+       
+ 
+        //mint Aeth and Ausdc by depositing into pool
+        deal(WETH, recipient, amount);
+        deal(USDC, recipient, amount);
+
+    
+    }
+
+
+    //Helper function to add hook as faciliator
+    function AddFacilitator(address faciliator) internal{
+        //need FACILITATOR_MANAGER_ROLE to address to add hook as faciliator
+        address whitelistedManager = 0x5300A1a15135EA4dc7aD5a167152C01EFc9b192A; //whitelisted address of aave dao
+
+        bytes32 FacilitatorRole = (IGhoToken(gho).FACILITATOR_MANAGER_ROLE());
+
+        
+        address hookAddress = address(this);
+        uint128 bucketCapacity = 100000e18;
+        vm.startPrank(whitelistedManager);
+        IGhoToken(gho).addFacilitator(faciliator, "BorrowHook", bucketCapacity);
+       
+        vm.stopPrank();
+
+        console2.log("GHO balance", IGhoToken(gho).balanceOf(hookAddress));
+
     }
 }
