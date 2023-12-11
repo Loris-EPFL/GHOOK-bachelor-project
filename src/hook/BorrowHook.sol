@@ -2,7 +2,7 @@
 pragma solidity >=0.8.19;
 
 import {
-    IPoolManager, Hooks, IHooks, BaseHook, BalanceDelta
+   IPoolManager,  Hooks, IHooks, BaseHook, BalanceDelta
 } from "v4-periphery/BaseHook.sol";
 import { IHookFeeManager } from "@uniswap/v4-core/contracts/interfaces/IHookFeeManager.sol";
 import { IDynamicFeeManager } from "@uniswap/v4-core/contracts/interfaces/IDynamicFeeManager.sol";
@@ -18,9 +18,13 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {EACAggregatorProxy} from "../interfaces/EACAggregatorProxy.sol";
 import {UD60x18} from "@prb-math/UD60x18.sol";
 import {IterableMapping} from "../utils/IterableMapping.sol";
+import {PoolKey} from "@uniswap/v4-core/contracts/types/PoolKey.sol";
+
 
 contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
-    using PoolIdLibrary for IPoolManager.PoolKey;
+    
+    
+    using PoolIdLibrary for PoolKey;
     using IterableMapping for IterableMapping.Map;
 
     // Modifier to check that the caller is the owner of
@@ -82,8 +86,9 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function beforeInitialize(
         address, // sender
-        IPoolManager.PoolKey calldata, // key
-        uint160 // sqrtPriceX96
+        PoolKey calldata, // key
+        uint160, // sqrtPriceX96
+        bytes calldata // data
     )
         external
         override
@@ -96,9 +101,10 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function afterInitialize(
         address , // sender
-        IPoolManager.PoolKey calldata, // key
+        PoolKey calldata, // key
         uint160, // sqrtPriceX96
-        int24 // tick
+        int24, // tick
+        bytes calldata // data
     )
         external
         pure
@@ -112,8 +118,9 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function beforeModifyPosition(
         address owner, // sender
-        IPoolManager.PoolKey calldata, // key
-        IPoolManager.ModifyPositionParams calldata params// params
+        PoolKey calldata, // key
+        IPoolManager.ModifyPositionParams calldata params,// params
+        bytes calldata // data
     )
         external
         override
@@ -142,9 +149,10 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function afterModifyPosition(
         address owner, // sender
-        IPoolManager.PoolKey calldata, // key
+        PoolKey calldata, // key
         IPoolManager.ModifyPositionParams calldata params, // params
-        BalanceDelta // delta
+        BalanceDelta, // delta
+        bytes calldata // data
     )
         external
         override
@@ -160,8 +168,9 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function beforeSwap(
         address, // sender
-        IPoolManager.PoolKey calldata, // key
-        IPoolManager.SwapParams calldata // params
+        PoolKey calldata, // key
+        IPoolManager.SwapParams calldata, // params
+        bytes calldata // data
     )
         external
         pure
@@ -175,9 +184,10 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function afterSwap(
         address sender, // sender
-        IPoolManager.PoolKey calldata, // key
+        PoolKey calldata, // key
         IPoolManager.SwapParams calldata, // params
-        BalanceDelta // delta
+        BalanceDelta, // delta
+        bytes calldata // data
     )
         external
         override
@@ -191,9 +201,10 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function beforeDonate(
         address, // sender
-        IPoolManager.PoolKey calldata, // key
+        PoolKey calldata, // key
         uint256, // amount0
-        uint256 // amount1
+        uint256, // amount1
+        bytes calldata // data
     )
         external
         pure
@@ -207,9 +218,10 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     /// @inheritdoc IHooks
     function afterDonate(
         address, // sender
-        IPoolManager.PoolKey calldata, // key
+        PoolKey calldata, // key
         uint256, // amount0
-        uint256 // amount1
+        uint256, // amount1
+        bytes calldata // data
     )
         external
         pure
@@ -220,20 +232,25 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
         return IHooks.afterDonate.selector;
     }
 
-    /// @inheritdoc IHookFeeManager
-    function getHookSwapFee(IPoolManager.PoolKey calldata) external pure returns (uint8) {
+    function getHookSwapFee(PoolKey calldata) external pure returns (uint8) {
         console2.log("getHookSwapFee");
         return 100;
     }
 
-    /// @inheritdoc IHookFeeManager
-    function getHookWithdrawFee(IPoolManager.PoolKey calldata) external pure returns (uint8) {
+    function getHookWithdrawFee(PoolKey calldata) external pure returns (uint8) {
         console2.log("getHookWithdrawFee");
         return 100;
     }
 
+    function getHookFees(PoolKey calldata key) external override view returns (uint24){
+        console2.log("getHookFees");
+        return 100;
+    }
+
+
+
     /// @inheritdoc IDynamicFeeManager
-    function getFee(IPoolManager.PoolKey calldata) external pure returns (uint24) {
+    function getFee(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata data) external override returns (uint24){
         console2.log("getFee");
         return 10_000;
     }
@@ -279,8 +296,8 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
 
     function _getUserLiquidityPriceUSD(address user) internal view returns (UD60x18){
         
-        IPoolManager.PoolKey memory key = _getPoolKey();
-        (uint160 sqrtPriceX96, int24 currentTick, , , , ) = poolManager.getSlot0(key.toId()); //curent price and tick of the pool
+        PoolKey memory key = _getPoolKey();
+        (uint160 sqrtPriceX96, int24 currentTick, ,  ) = poolManager.getSlot0(key.toId()); //curent price and tick of the pool
         //get user liquidity position stored when adding liquidity
         UserLiquidity memory userCurrentPosition = userPosition[user];
 
@@ -289,8 +306,8 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
 
 
     function _getPositionUsdPrice(int24 tickLower, int24 tickUpper, uint128 liquidity) internal view returns (UD60x18){
-        IPoolManager.PoolKey memory key = _getPoolKey();
-        (uint160 sqrtPriceX96, int24 currentTick, , , , ) = poolManager.getSlot0(key.toId()); //curent price and tick of the pool
+        PoolKey memory key = _getPoolKey();
+        (uint160 sqrtPriceX96, int24 currentTick, ,  ) = poolManager.getSlot0(key.toId()); //curent price and tick of the pool
         
         //Lower and Upper tick of the position
         uint160 sqrtPriceLower = TickMath.getSqrtRatioAtTick(tickLower); //get price as decimal from Q64.96 format
@@ -355,8 +372,8 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
         int24 tickLower = params.tickLower;
         int24 tickUpper = params.tickUpper;
 
-        IPoolManager.PoolKey memory key = _getPoolKey();
-        (uint160 sqrtPriceX96, int24 currentTick, , , , ) = poolManager.getSlot0(key.toId());
+        PoolKey memory key = _getPoolKey();
+        (uint160 sqrtPriceX96, int24 currentTick, ,  ) = poolManager.getSlot0(key.toId());
         uint128 userLiquidity = poolManager.getLiquidity(key.toId(),user,  tickLower, tickUpper);
 
         userPosition[user] = UserLiquidity(
@@ -425,11 +442,11 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
 
 
     //Helper function to return PoolKey
-    function _getPoolKey() private view returns (IPoolManager.PoolKey memory) {
-        return IPoolManager.PoolKey({
+    function _getPoolKey() private view returns (PoolKey memory) {
+        return PoolKey({
             currency0: Currency.wrap(address(WETH)),
             currency1: Currency.wrap(address(USDC)),
-            fee: Fees.DYNAMIC_FEE_FLAG + Fees.HOOK_SWAP_FEE_FLAG + Fees.HOOK_WITHDRAW_FEE_FLAG, // 0xE00000 = 111
+            fee:  300, // 0xE00000 = 111 //todo change fee accordingly
             tickSpacing: 60,
             hooks: IHooks(address(this))
         });

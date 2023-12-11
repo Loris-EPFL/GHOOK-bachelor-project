@@ -16,12 +16,17 @@ import {TickMath} from "@uniswap/v4-core/contracts/libraries/TickMath.sol";
 import {Position as PoolPosition} from "@uniswap/v4-core/contracts/libraries/Position.sol";
 import {LiquidityHelpers} from "../src/lens/LiquidityHelpers.sol";
 import { UniswapHooksFactory } from "../../src/utils/UniswapHooksFactory.sol";
+import { BorrowHook } from "../../src/hook/BorrowHook.sol";
 
 
 contract LiquidityOwnershipTest is HookTest, Deployers {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using PositionIdLibrary for Position;
+
+    UniswapHooksFactory internal uniswapHooksFactory;
+    BorrowHook internal deployedHooks;
+
 
     LiquidityPositionManager lpm;
     LiquidityHelpers helper;
@@ -34,7 +39,9 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
 
     function setUp() public {
         HookTest.initHookTestEnv();
-        address deployedHooks;
+
+        address owner = 0x388C818CA8B9251b393131C08a736A67ccB19297; //address of owner of hook
+
 
         lpm = new LiquidityPositionManager(IPoolManager(address(manager)));
         helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
@@ -42,25 +49,26 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         token0.approve(address(lpm), type(uint256).max);
         token1.approve(address(lpm), type(uint256).max);
 
-        //Premine hook address
-        uniswapHooksFactory = new UniswapHooksFactory();
+        /*
 
         for (uint256 i = 0; i < 1500; i++) {
             bytes32 salt = bytes32(i);
-            address expectedAddress = uniswapHooksFactory.getPrecomputedHookAddress(owner, poolManager, salt);
+            address expectedAddress = uniswapHooksFactory.getPrecomputedHookAddress(owner, manager, salt);
 
             // 0xff = 11111111 = all hooks enabled
             if (_doesAddressStartWith(expectedAddress, 0xff)) {
                 console2.log("Found hook address", expectedAddress, "with salt of", i);
 
-                deployedHooks = BorrowHook(uniswapHooksFactory.deploy(owner, poolManager, salt));
+                deployedHooks = new BorrowHook(uniswapHooksFactory.deploy(owner, manager, salt), manager);
                 assertEq(address(deployedHooks), expectedAddress, "address is not as expected");
             }
         }
+        */
 
         // Create the pool
+        deployedHooks = new BorrowHook(owner, manager);
         poolKey =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(0x0)));
+            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
 
@@ -79,6 +87,12 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         token1.approve(address(lpm), type(uint256).max);
         vm.stopPrank();
     }
+
+    
+    function _doesAddressStartWith(address _address, uint160 _prefix) private pure returns (bool) {
+        return uint160(_address) / (2 ** (8 * (19))) == _prefix;
+    }
+
 
     // bob *can* create a position for alice
     function test_recipientAdd() public {
