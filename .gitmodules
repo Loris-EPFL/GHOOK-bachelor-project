@@ -16,3 +16,6 @@
 [submodule "lib/gho-core"]
 	path = lib/gho-core
 	url = https://github.com/aave/gho-core
+[submodule "lib/prb-math"]
+	path = lib/prb-math
+	url = https://github.com/PaulRBerg/prb-math
