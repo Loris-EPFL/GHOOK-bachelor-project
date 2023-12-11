@@ -17,6 +17,9 @@ import {Position as PoolPosition} from "@uniswap/v4-core/contracts/libraries/Pos
 import {LiquidityHelpers} from "../src/lens/LiquidityHelpers.sol";
 import { UniswapHooksFactory } from "../../src/utils/UniswapHooksFactory.sol";
 import { BorrowHook } from "../../src/hook/BorrowHook.sol";
+import {HookMiner} from "./utils/HookMiner.sol";
+import {Hooks} from "@uniswap/v4-core/contracts/libraries/Hooks.sol";
+
 
 
 contract LiquidityOwnershipTest is HookTest, Deployers {
@@ -46,27 +49,25 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         lpm = new LiquidityPositionManager(IPoolManager(address(manager)));
         helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
 
+        console2.log("token0: %s", address(token0)); 
+        console2.log("token1: %s", address(token1));
+
         token0.approve(address(lpm), type(uint256).max);
         token1.approve(address(lpm), type(uint256).max);
 
-        /*
+        
 
-        for (uint256 i = 0; i < 1500; i++) {
-            bytes32 salt = bytes32(i);
-            address expectedAddress = uniswapHooksFactory.getPrecomputedHookAddress(owner, manager, salt);
-
-            // 0xff = 11111111 = all hooks enabled
-            if (_doesAddressStartWith(expectedAddress, 0xff)) {
-                console2.log("Found hook address", expectedAddress, "with salt of", i);
-
-                deployedHooks = new BorrowHook(uniswapHooksFactory.deploy(owner, manager, salt), manager);
-                assertEq(address(deployedHooks), expectedAddress, "address is not as expected");
-            }
-        }
-        */
+        uint160 flags = uint160(
+           Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_MODIFY_POSITION_FLAG
+                | Hooks.AFTER_MODIFY_POSITION_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG
+        );
+        (address hookAddress, bytes32 salt) =
+            HookMiner.find(address(this), flags, type(BorrowHook).creationCode, abi.encode(address(owner), address(manager)));
+        deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
+        require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
+        
 
         // Create the pool
-        deployedHooks = new BorrowHook(owner, manager);
         poolKey =
             PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
