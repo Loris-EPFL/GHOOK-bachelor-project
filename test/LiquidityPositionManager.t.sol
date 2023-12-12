@@ -51,11 +51,13 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
 
-        AddFacilitator(address(deployedHooks));
+        AddFacilitator(address(lpm)); //whitelist lpm to mint gho
+
+        console2.log("deployedHooks: %s", address(deployedHooks));
 
         // Create the pool
         poolKey =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
+            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 300, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
 
@@ -64,10 +66,18 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
       
     }
 
+    function test_borrow() public{
+        //AddFacilitator(address(deployedHooks));
+        lpm.setPoolKey(poolKey);
+        test_addLiquidity();
+        console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
+        lpm.borrowGho(1000e18, address(this));
+    }
+
     function test_addLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e4;
+        uint256 liquidity = 1e8;
 
         console2.log("token0 balance before", token0.balanceOf(address(this)));
         console2.log("token1 balance before", token1.balanceOf(address(this)));
@@ -82,6 +92,8 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
             }),
             ZERO_BYTES
         );
+        uint128 liquidityTest = manager.getLiquidity(poolKey.toId(),address(lpm), tickLower, tickUpper);
+        console2.log("liquidity for test borrow %e", liquidityTest);
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         assertEq(lpm.balanceOf(address(this), position.toTokenId()), liquidity);
     }
@@ -89,7 +101,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_removeFullLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e4;
+        uint256 liquidity = 1e10;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         assertEq(lpm.balanceOf(address(this), position.toTokenId()), liquidity);
@@ -109,7 +121,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_removePartialLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e4;
+        uint256 liquidity = 1e10;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
 
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});

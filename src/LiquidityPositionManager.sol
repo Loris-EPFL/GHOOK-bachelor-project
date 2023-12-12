@@ -43,7 +43,7 @@ contract LiquidityPositionManager is ERC6909 {
 
     struct BorrowerPosition{
         Position position;
-        uint256 liquidity;
+        uint128 liquidity;
         uint256 debt;
     }
 
@@ -78,7 +78,7 @@ contract LiquidityPositionManager is ERC6909 {
     //max bucket capacity (= max total mintable gho capacity)
     uint128 public ghoBucketCapacity = 100000e18; //100k gho
 
-    mapping(address => BorrowerPosition) private userPosition; //user position
+    mapping(address => BorrowerPosition) public userPosition; //user position todo need to be private ?
     address[] private users; //all users list, used to iterate through mapping after each swap to verify if user is liquidable
 
     IterableMapping.Map private usersDebt; //users
@@ -228,7 +228,7 @@ contract LiquidityPositionManager is ERC6909 {
             // TODO: guarantee that k is less than int256 max
             // TODO: proper book keeping to avoid double-counting
             uint256 liquidity = uint256(params.liquidityDelta);
-            userPosition[owner] = BorrowerPosition(Position({poolKey: key, tickLower: params.tickLower, tickUpper: params.tickUpper}),liquidity, userPosition[owner].debt) ;
+            userPosition[owner] = BorrowerPosition(Position({poolKey: key, tickLower: params.tickLower, tickUpper: params.tickUpper}),uint128(liquidity), userPosition[owner].debt) ;
             _mint(owner, tokenId, uint256(params.liquidityDelta));
         }
 
@@ -294,12 +294,15 @@ contract LiquidityPositionManager is ERC6909 {
     }
 
     function borrowGho(uint256 amount, address user) public returns (bool, uint256){
+
+        //todo add caller is owner check
         //if amount is inferior to min amount, revert
         if(amount < minBorrowAmount){
             revert("Borrow amount to borrow is inferior to 1 GHO");
         }
         //TODO : implement logic to check if user has enough collateral to borrow
         console2.log("Borrow amount requested %e", amount);    
+        console2.log("user collateral value in USD %e", _getUserLiquidityPriceUSD(user).unwrap() / 10**18);
         console2.log("Max borrow amount %e", _getUserLiquidityPriceUSD(user).sub((UD60x18.wrap(userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(gho).decimals()))).mul(maxLTVUD60x18).unwrap());
         //get user position price in USD, then check if borrow amount + debt already owed (adjusted to gho decimals) is inferior to maxLTV (80% = maxLTV/100)
         if(_getUserLiquidityPriceUSD(user).lte((UD60x18.wrap((amount+ userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(gho).decimals()))).mul(maxLTVUD60x18))){ 
@@ -335,16 +338,21 @@ contract LiquidityPositionManager is ERC6909 {
     function _getUserLiquidityPriceUSD(address user) internal view returns (UD60x18){
         
         //PoolKey memory key = _getPoolKey();
-        Position memory userPos = userPosition[user].position;
-        PoolKey memory key = userPos.poolKey;
+        BorrowerPosition memory borrowerPosition = userPosition[user];
+        Position memory positionParams = borrowerPosition.position;
+        PoolKey memory key = positionParams.poolKey;
+
+        console2.log("user tick lower %e", positionParams.tickLower);
+        console2.log("user tick upper %e", positionParams.tickUpper);
+        console2.log("poolkey %s", address(poolKey.hooks));
         (uint160 sqrtPriceX96, int24 currentTick, ,  ) = manager.getSlot0(key.toId()); //curent price and tick of the pool
         //get user liquidity position stored when adding liquidity
         //UserLiquidity memory userCurrentPosition = userPosition[user];
-        uint128 liquidity = manager.getLiquidity(key.toId(),user, userPos.tickLower, userPos.tickUpper); //get user liquidity
+        //uint128 liquidity = manager.getLiquidity(key.toId(),user, userPos.tickLower, userPos.tickUpper); //get user liquidity
 
+        
 
-
-        return _getPositionUsdPrice(userPos.tickLower, userPos.tickUpper, liquidity, key);
+        return _getPositionUsdPrice(positionParams.tickLower, positionParams.tickUpper, borrowerPosition.liquidity, key);
     }   
 
 
@@ -470,6 +478,10 @@ contract LiquidityPositionManager is ERC6909 {
         }
     }
 
+    function getLiquidityforUser(address user) public view returns (uint128){
+        return userPosition[user].liquidity;
+    }
+
     // --- ERC-6909 --- //
     function _mint(address owner, uint256 tokenId, uint256 amount) internal {
         balanceOf[owner][tokenId] += amount;
@@ -486,7 +498,8 @@ contract LiquidityPositionManager is ERC6909 {
         return poolKey;
     }
 
-    function _setPoolKey(PoolKey memory _poolKey) private onlyOwner{
+    //todo add modifier to prevent non owner to call this function
+    function setPoolKey(PoolKey memory _poolKey) public {
         poolKey = _poolKey;
     }
 }

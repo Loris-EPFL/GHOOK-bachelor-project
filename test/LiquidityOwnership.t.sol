@@ -69,11 +69,13 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
 
         AddFacilitator(address(deployedHooks));
+
+        console2.log("deployedHooks: %s", address(deployedHooks));
         
 
         // Create the pool
         poolKey =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
+            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 300, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
 
@@ -97,6 +99,11 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     
     function _doesAddressStartWith(address _address, uint160 _prefix) private pure returns (bool) {
         return uint160(_address) / (2 ** (8 * (19))) == _prefix;
+    }
+
+    function test_borrow() public{
+        test_recipientAdd();
+
     }
 
 
