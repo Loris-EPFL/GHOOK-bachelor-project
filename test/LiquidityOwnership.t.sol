@@ -32,6 +32,8 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     UniswapHooksFactory internal uniswapHooksFactory;
     BorrowHook internal deployedHooks;
 
+    bytes constant liquidate = abi.encode(true);
+
 
     LiquidityPositionManager lpm;
     LiquidityHelpers helper;
@@ -68,7 +70,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
 
-        AddFacilitator(address(deployedHooks));
+        AddFacilitator(address(lpm));
 
         console2.log("deployedHooks: %s", address(deployedHooks));
         
@@ -295,6 +297,49 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
 
         // alice's LP is closed
         assertEq(lpm.balanceOf(alice, position.toTokenId()), 0);
+
+        // TODO: alice receives the underlying tokens
+    }
+
+    // with operator set, bob can liquidate to alice's position
+    function test_liquidation() public {
+        int24 tickLower = -600;
+        int24 tickUpper = 600;
+        uint256 liquidity = 1e10;
+
+        lpm.setPoolKey(poolKey);
+
+        vm.startPrank(alice);
+        lpm.modifyPosition(
+            alice, // alice, the owner
+            poolKey,
+            IPoolManager.ModifyPositionParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: int256(liquidity)
+            }),
+            ZERO_BYTES
+        );
+        Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
+        assertEq(lpm.balanceOf(alice, position.toTokenId()), liquidity);
+
+        lpm.borrowGho(2e18, alice);
+
+        // alice allows bob as an operator
+        
+        lpm.setOperator(address(lpm), true);
+        vm.stopPrank();
+
+        vm.startPrank(address(lpm));
+        lpm.liquidateUser(
+            alice, // lpm has operator permissions to close alice's LP
+            position,
+            ZERO_BYTES
+        );
+        vm.stopPrank();
+
+        // alice's LP is closed
+        //assertEq(lpm.balanceOf(alice, position.toTokenId()), 0);
 
         // TODO: alice receives the underlying tokens
     }

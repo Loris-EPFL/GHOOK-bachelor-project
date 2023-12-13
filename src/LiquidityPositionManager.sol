@@ -72,6 +72,9 @@ contract LiquidityPositionManager is ERC6909 {
     address WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
+    bytes constant ZERO_BYTES = new bytes(0);
+
+
     EACAggregatorProxy public ETHPriceFeed = EACAggregatorProxy(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419); //chainlink ETH price feed
     EACAggregatorProxy public USDCPriceFeed = EACAggregatorProxy(0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6); //chainlink USDC price feed
 
@@ -127,45 +130,7 @@ contract LiquidityPositionManager is ERC6909 {
         }
     }
 
-    /// @notice Given an existing position, liquidate position by repaying debt with a flashloan, then withdrawing collateral
-    ///     This function supports partially withdrawing tokens from an LP to open up a new position
-    /// @param owner The owner of the position
-    /// @param position The position to liquidate
-    /// @param existingLiquidityDelta How much liquidity to remove from the existing position
-    /// @param params The new position parameters
-    /// @param hookDataOnBurn the arbitrary bytes to provide to hooks when the existing position is modified
-    /// @param hookDataOnMint the arbitrary bytes to provide to hooks when the new position is created
-    function liquidateUser(
-        address owner,
-        Position memory position,
-        int256 existingLiquidityDelta,
-        IPoolManager.ModifyPositionParams memory params,
-        bytes calldata hookDataOnBurn,
-        bytes calldata hookDataOnMint
-    ) external returns (BalanceDelta delta) {
-        if (!(msg.sender == owner || isOperator[owner][msg.sender])) revert InsufficientPermission();
-        delta = abi.decode(
-            manager.lock(
-                abi.encodeCall(
-                    this.handleRebalancePosition,
-                    (msg.sender, owner, position, existingLiquidityDelta, params, hookDataOnBurn, hookDataOnMint)
-                )
-            ),
-            (BalanceDelta)
-        );
-
-        // adjust 6909 balances
-        _burn(owner, position.toTokenId(), uint256(-existingLiquidityDelta));
-        uint256 newPositionTokenId =
-            Position({poolKey: position.poolKey, tickLower: params.tickLower, tickUpper: params.tickUpper}).toTokenId();
-        _mint(owner, newPositionTokenId, uint256(params.liquidityDelta));
-
-        uint256 ethBalance = address(this).balance;
-        if (ethBalance > 0) {
-            CurrencyLibrary.NATIVE.transfer(msg.sender, ethBalance);
-        }
-    }
-
+    
     function handleRebalancePosition(
         address sender,
         address owner,
@@ -206,8 +171,9 @@ contract LiquidityPositionManager is ERC6909 {
         PoolKey memory key,
         IPoolManager.ModifyPositionParams memory params,
         bytes calldata hookData
-    ) external returns (BalanceDelta delta) {
+    ) public returns (BalanceDelta delta) {
         // checks & effects
+        //setOperator(address(this), true); //set this contract as operator to allow minting and burning, plus liquidations
         uint256 tokenId = Position({poolKey: key, tickLower: params.tickLower, tickUpper: params.tickUpper}).toTokenId();
         if (params.liquidityDelta < 0) {
             // only the operator or owner can burn
@@ -215,15 +181,19 @@ contract LiquidityPositionManager is ERC6909 {
                 revert InsufficientPermission();
             } 
 
+            bool isUserLiquidable = abi.decode(hookData, (bool)); //checks if the calldata specifies the user is liquidable
             uint256 liquidity = uint256(-params.liquidityDelta);
             console2.log("liquidity to withdraw %e", uint128(liquidity));
             console2.log("can user withdraw ? %s", _canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity)));
-            if(!_canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity))){
-                 revert("Cannot Withdraw because LTV is inferior to min LTV"); //todo allow partial withdraw according to debt
+            if(!_canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity)) && !isUserLiquidable){
+                revert("Cannot Withdraw because LTV is inferior to min LTV"); //todo allow partial withdraw according to debt
             }
 
             userPosition[owner] = BorrowerPosition(Position({poolKey: key, tickLower: 0, tickUpper: 0}), 0, userPosition[owner].debt); //todo check if this is the right way to remove user position
             _burn(owner, tokenId, uint256(-params.liquidityDelta));
+            
+
+           
         } else {
             // allow anyone to mint to a destination address
             // TODO: guarantee that k is less than int256 max
@@ -244,6 +214,7 @@ contract LiquidityPositionManager is ERC6909 {
         );
 
         uint256 ethBalance = address(this).balance;
+        console2.log("ETH balance before actual modify position %e", ethBalance);
         if (ethBalance > 0) {
             CurrencyLibrary.NATIVE.transfer(owner, ethBalance);
         }
@@ -261,6 +232,65 @@ contract LiquidityPositionManager is ERC6909 {
             revert(add(returnData, 32), mload(returnData))
         }
     }
+
+    /// @notice Given an existing position, liquidate position by repaying debt with a flashloan, then withdrawing collateral
+    ///     This function supports partially withdrawing tokens from an LP to open up a new position
+    /// @param owner The owner of the position
+    /// @param position The position to liquidate
+    /// @param hookLiquidationData the arbitrary bytes to provide to hooks when the existing position is modified
+    function liquidateUser(
+        address owner,
+        Position memory position,
+        bytes calldata hookLiquidationData
+    ) external returns (BalanceDelta delta) {
+        if (!(msg.sender == owner || isOperator[owner][msg.sender])) revert InsufficientPermission();
+        //Set Position params to 0 to liquidate
+        BorrowerPosition storage currentParams = userPosition[owner];
+
+
+
+        IPoolManager.ModifyPositionParams memory liquidationParams = IPoolManager.ModifyPositionParams({
+            tickLower: currentParams.position.tickLower,
+            tickUpper: currentParams.position.tickUpper,
+            liquidityDelta: -int256(int128(currentParams.liquidity))
+        });//todo check safe conversion ?
+
+        console2.log("liquidity to withdraw %e", -int256(int128(currentParams.liquidity)));
+        /*
+        manager.modifyPosition(
+             // bob has operator permissions to close alice's LP
+            poolKey,
+            IPoolManager.ModifyPositionParams({
+                tickLower: currentParams.position.tickLower,
+                tickUpper: currentParams.position.tickLower,
+                liquidityDelta: -int256(int128(currentParams.liquidity))
+            }),
+            hookLiquidationData
+        );
+        */
+
+        // interactions, second parameter is receiver of tokens.
+        delta = abi.decode(
+            manager.lock(
+                abi.encodeCall(
+                    this.handleModifyPosition, abi.encode(CallbackData(msg.sender, address(this), poolKey, liquidationParams, hookLiquidationData))
+                )
+            ),
+            (BalanceDelta)
+        );
+
+        //After the call, balances should be settled and we should receive positions tokens back here.
+        //Then, we use a flashloan to repay debt, then pay back flashloan using collateral
+
+        console2.log("ETH balance before actual liquidation %e", ERC20(WETH).balanceOf(address(this)));
+        console2.log("USDC balance before actual liquidation %e", ERC20(USDC).balanceOf(address(this)));
+        
+
+        // adjust 6909 balances
+        _burn(owner, position.toTokenId(), uint256(currentParams.liquidity));
+
+    }
+
 
     function processBalanceDelta(
         address sender,
