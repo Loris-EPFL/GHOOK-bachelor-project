@@ -67,17 +67,47 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     }
 
     function test_borrow() public{
-        //AddFacilitator(address(deployedHooks));
         lpm.setPoolKey(poolKey);
         test_addLiquidity();
         console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
         lpm.borrowGho(1000e18, address(this));
     }
 
+    function test_withdrawWhileDebt() public{
+        lpm.setPoolKey(poolKey);
+        int24 tickLower = -600;
+        int24 tickUpper = 600;
+        uint256 liquidity = 1e10;
+        addLiquidity(poolKey, tickLower, tickUpper, liquidity);
+        console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
+        lpm.borrowGho(3000e18, address(this));
+
+        Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
+        uint256 balanceBefore = lpm.balanceOf(address(this), position.toTokenId());
+        removeLiquidity(poolKey, tickLower, tickUpper, liquidity / 2); // remove half of the position
+
+    }
+
+    function test_withdrawWhileTooMuchDebt() public{
+        lpm.setPoolKey(poolKey);
+       
+        int24 tickLower = -600;
+        int24 tickUpper = 600;
+        uint256 liquidity = 1e10;
+        addLiquidity(poolKey, tickLower, tickUpper, liquidity);
+
+        console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
+        lpm.borrowGho(400000e18, address(this)); //max borrow is 5.23e5 usd worth of gho, we borrow 4e5 usd worth of gho
+
+        Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
+        uint256 balanceBefore = lpm.balanceOf(address(this), position.toTokenId());
+        removeLiquidity(poolKey, tickLower, tickUpper, liquidity / 2); // remove half of the position
+    }
+
     function test_addLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e8;
+        uint256 liquidity = 1e10;
 
         console2.log("token0 balance before", token0.balanceOf(address(this)));
         console2.log("token1 balance before", token1.balanceOf(address(this)));

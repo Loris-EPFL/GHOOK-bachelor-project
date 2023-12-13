@@ -217,6 +217,7 @@ contract LiquidityPositionManager is ERC6909 {
 
             uint256 liquidity = uint256(-params.liquidityDelta);
             console2.log("liquidity to withdraw %e", uint128(liquidity));
+            console2.log("can user withdraw ? %s", _canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity)));
             if(!_canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity))){
                  revert("Cannot Withdraw because LTV is inferior to min LTV"); //todo allow partial withdraw according to debt
             }
@@ -461,7 +462,13 @@ contract LiquidityPositionManager is ERC6909 {
         console2.log("position value user wants to withdraw %e", _getPositionUsdPrice(tickLower, tickUpper, liquidity, key).unwrap()/ 10**18);
         //Theorically, position value after withdraw should be superior to 0, but we check just in case
         UD60x18 _positionValueAfterWithdraw = _getUserLiquidityPriceUSD(user).gte(_getPositionUsdPrice(tickLower, tickUpper, liquidity, key)) ? _getUserLiquidityPriceUSD(user).sub(_getPositionUsdPrice(tickLower, tickUpper, liquidity, key)) : UD60x18.wrap(0);
-        
+        UD60x18 userDebt = UD60x18.wrap(userPosition[user].debt).div(UD60x18.wrap(10**ERC20(gho).decimals()));
+        /*
+        console2.log("position value after withdraw %e", _positionValueAfterWithdraw.unwrap());
+        console2.log("ltv is %e", maxLTVUD60x18.unwrap());
+        console2.log("user debt USD %e", userDebt.unwrap() );
+        console2.log("withdraw ltv calc %s", userDebt.div(_positionValueAfterWithdraw).lte(maxLTVUD60x18));
+        */
         if(_positionValueAfterWithdraw.isZero() && userPosition[user].debt == 0){
             //If user has no debt and withdraw all his position, he can withdraw
             return true;
@@ -469,8 +476,9 @@ contract LiquidityPositionManager is ERC6909 {
             //If user has debt and withdraw all his position, he cannot withdraw
             return false;
         }
-        if(!_positionValueAfterWithdraw.isZero() && (UD60x18.wrap(userPosition[user].debt).div(UD60x18.wrap((10**ERC20(gho).decimals()))).div(_positionValueAfterWithdraw).lte(maxLTVUD60x18))){
+        if(!_positionValueAfterWithdraw.isZero() && userDebt.div(_positionValueAfterWithdraw).lte(maxLTVUD60x18)){
             //If user has debt and withdraw part of his position, check if debt / (position price - withdraw liquidity amount) is inferior to maxLTV (=77%)
+            console2.log("user LTV after withdraw %e", UD60x18.wrap(userPosition[user].debt).div((UD60x18.wrap((10**ERC20(gho).decimals()))).div(_positionValueAfterWithdraw)).unwrap());
             return true;
         }else{
             //unhandled case, default to false to avoid user withdrawing more than he should
@@ -499,7 +507,7 @@ contract LiquidityPositionManager is ERC6909 {
     }
 
     //todo add modifier to prevent non owner to call this function
-    function setPoolKey(PoolKey memory _poolKey) public {
+    function setPoolKey(PoolKey memory _poolKey) public{
         poolKey = _poolKey;
     }
 }

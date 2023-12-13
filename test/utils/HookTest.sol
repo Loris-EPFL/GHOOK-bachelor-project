@@ -117,7 +117,7 @@ contract HookTest is Test {
 
         
         address hookAddress = address(this);
-        uint128 bucketCapacity = 100000e18;
+        uint128 bucketCapacity = 1000000e18; //1 million GHO
         vm.startPrank(whitelistedManager);
         IGhoToken(gho).addFacilitator(faciliator, "BorrowHook", bucketCapacity);
        
