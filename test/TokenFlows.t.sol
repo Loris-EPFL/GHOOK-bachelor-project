@@ -39,8 +39,10 @@ contract TokenFlowsTest is HookTest, Deployers {
 
     function setUp() public {
         HookTest.initHookTestEnv();
+        address owner = makeAddr("owner");
 
-        lpm = new LiquidityPositionManager(IPoolManager(address(manager)));
+
+        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner);
         helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
 
         token0.approve(address(lpm), type(uint256).max);

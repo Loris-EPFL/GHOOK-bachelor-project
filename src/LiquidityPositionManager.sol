@@ -21,17 +21,21 @@ import {EACAggregatorProxy} from "./interfaces/EACAggregatorProxy.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IGhoToken} from '@aave/gho/gho/interfaces/IGhoToken.sol';
 import {SqrtPriceMath} from "@uniswap/v4-core/contracts/libraries/SqrtPriceMath.sol";
+import {AUniswap} from "./utils/FlashLoanUtils/AUniswap.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 
 
 
 
-contract LiquidityPositionManager is ERC6909 {
+
+contract LiquidityPositionManager is ERC6909, AUniswap{
     using CurrencyLibrary for Currency;
     using PositionIdLibrary for Position;
     using PoolIdLibrary for PoolKey;
 
     IPoolManager public immutable manager;
+     address public initialOwner;
 
     struct CallbackData {
         address sender;
@@ -47,30 +51,16 @@ contract LiquidityPositionManager is ERC6909 {
         uint256 debt;
     }
 
-    constructor(IPoolManager _manager) {
+    constructor(IPoolManager _manager, address _owner) Ownable(_owner){
         manager = _manager;
     }
-
-    // Modifier to check that the caller is the owner of
-    // the contract.
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not owner");
-        // Underscore is a special character only used inside
-        // a function modifier and it tells Solidity to
-        // execute the rest of the code.
-        _;
-    }
-
-
-    address public owner;
 
     uint8 maxLTV = 80; //80%
 
     UD60x18 maxLTVUD60x18 = UD60x18.wrap(maxLTV).div(UD60x18.wrap(100)); //80% as UD60x18
     uint256 minBorrowAmount = 1e18; //1 GHO
     address public gho = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f;
-    address WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    //todo fix override issues with WETH and USDC
 
     bytes constant ZERO_BYTES = new bytes(0);
 
@@ -248,26 +238,15 @@ contract LiquidityPositionManager is ERC6909 {
         BorrowerPosition storage currentParams = userPosition[owner];
 
 
-
+        uint256 userDebtToRepay = currentParams.debt;
         IPoolManager.ModifyPositionParams memory liquidationParams = IPoolManager.ModifyPositionParams({
             tickLower: currentParams.position.tickLower,
             tickUpper: currentParams.position.tickUpper,
             liquidityDelta: -int256(int128(currentParams.liquidity))
         });//todo check safe conversion ?
 
-        console2.log("liquidity to withdraw %e", -int256(int128(currentParams.liquidity)));
-        /*
-        manager.modifyPosition(
-             // bob has operator permissions to close alice's LP
-            poolKey,
-            IPoolManager.ModifyPositionParams({
-                tickLower: currentParams.position.tickLower,
-                tickUpper: currentParams.position.tickLower,
-                liquidityDelta: -int256(int128(currentParams.liquidity))
-            }),
-            hookLiquidationData
-        );
-        */
+       uint256 token0balance = ERC20(WETH).balanceOf(address(this));
+       uint256 token1balance = ERC20(USDC).balanceOf(address(this));
 
         // interactions, second parameter is receiver of tokens.
         delta = abi.decode(
@@ -282,8 +261,34 @@ contract LiquidityPositionManager is ERC6909 {
         //After the call, balances should be settled and we should receive positions tokens back here.
         //Then, we use a flashloan to repay debt, then pay back flashloan using collateral
 
-        console2.log("ETH balance before actual liquidation %e", ERC20(WETH).balanceOf(address(this)));
-        console2.log("USDC balance before actual liquidation %e", ERC20(USDC).balanceOf(address(this)));
+       
+
+        token0balance = ERC20(WETH).balanceOf(address(this)) - token0balance; //get actual received token0 amount after withdrawing position
+        token1balance = ERC20(USDC).balanceOf(address(this)) - token1balance; //get actual received token1 amount after withdrawing position
+
+        console2.log("ETH balance before actual liquidation %e", token0balance);
+        console2.log("USDC balance before actual liquidation %e", token1balance);
+        //(uint256 ghoBalanceAfterToken1Swap, ) = _quoteSwapToGHOfromUSDC(token1balance);
+        _resetUniswapAllowance(USDC);
+        _resetUniswapAllowance(WETH);
+
+        
+        uint256 ghoAfterUSDCswap = _swapUSDCToGHO(token1balance, 0); //swap token1 to gho
+        console2.log("GHO balance after USDC swap %e", ghoAfterUSDCswap);
+        if(userDebtToRepay > ghoAfterUSDCswap){
+            //then we swap the WETH needed to repay the debt
+            uint256 ghoAfterWETHswap = _swapWETHtoGHO(token0balance, userDebtToRepay - ghoAfterUSDCswap  ); //swap WETH to gho
+            console2.log("GHO balance after WETH swap %e", ghoAfterWETHswap);
+            if(ghoAfterUSDCswap + ghoAfterWETHswap < userDebtToRepay){
+                revert("Not enough GHO to repay debt"); //todo add proper error message
+            }
+        }
+
+         console2.log("GHO balance after total swap %e", ERC20(gho).balanceOf(address(this)));  
+
+        
+       
+
         
 
         // adjust 6909 balances
@@ -463,9 +468,6 @@ contract LiquidityPositionManager is ERC6909 {
     }
     }
 
-    function liquidateUser(address user, address liquidator) public{
-        manager.take(Currency.wrap(address(USDC)), address(this), 1);
-    }
 
     function getUserPositonPriceUSD(address user) public view returns (uint256){
         return _getUserLiquidityPriceUSD(user).unwrap() / 10**18;

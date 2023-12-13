@@ -47,10 +47,12 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function setUp() public {
         HookTest.initHookTestEnv();
 
-        address owner = 0x388C818CA8B9251b393131C08a736A67ccB19297; //address of owner of hook
+        //address owner = 0x388C818CA8B9251b393131C08a736A67ccB19297; //address of owner of hook
+        address owner = makeAddr("owner");
 
 
-        lpm = new LiquidityPositionManager(IPoolManager(address(manager)));
+
+        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner);
         helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
 
         console2.log("token0: %s", address(token0)); 
@@ -323,7 +325,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         assertEq(lpm.balanceOf(alice, position.toTokenId()), liquidity);
 
-        lpm.borrowGho(2e18, alice);
+        lpm.borrowGho(340e18, alice);
 
         // alice allows bob as an operator
         
