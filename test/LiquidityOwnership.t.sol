@@ -325,7 +325,7 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         assertEq(lpm.balanceOf(alice, position.toTokenId()), liquidity);
 
-        lpm.borrowGho(340e18, alice);
+        lpm.borrowGho(236e18, alice);
 
         // alice allows bob as an operator
         

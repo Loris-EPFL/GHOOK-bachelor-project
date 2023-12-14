@@ -175,11 +175,12 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
             uint256 liquidity = uint256(-params.liquidityDelta);
             console2.log("liquidity to withdraw %e", uint128(liquidity));
             console2.log("can user withdraw ? %s", _canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity)));
-            if(!_canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity)) && !isUserLiquidable){
+            if(!_canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity))){
                 revert("Cannot Withdraw because LTV is inferior to min LTV"); //todo allow partial withdraw according to debt
             }
 
-            userPosition[owner] = BorrowerPosition(Position({poolKey: key, tickLower: 0, tickUpper: 0}), 0, userPosition[owner].debt); //todo check if this is the right way to remove user position
+
+            userPosition[owner] = BorrowerPosition(Position({poolKey: key, tickLower: params.tickLower, tickUpper: params.tickUpper}), uint128(userPosition[owner].liquidity - liquidity), userPosition[owner].debt); //todo check if this is the right way to remove user position
             _burn(owner, tokenId, uint256(-params.liquidityDelta));
             
 
@@ -340,11 +341,14 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         console2.log("Borrow amount requested %e", amount);    
         console2.log("user collateral value in USD %e", _getUserLiquidityPriceUSD(user).unwrap() / 10**18);
         console2.log("Max borrow amount %e", _getUserLiquidityPriceUSD(user).sub((UD60x18.wrap(userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(gho).decimals()))).mul(maxLTVUD60x18).unwrap());
+        console2.log("user collateral value in USD %e", _getUserLiquidityPriceUSD(user).unwrap() / 10**18);
+        console2.log("ahhhh %e", (UD60x18.wrap((amount+ userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(gho).decimals()))).div(maxLTVUD60x18).unwrap());
         //get user position price in USD, then check if borrow amount + debt already owed (adjusted to gho decimals) is inferior to maxLTV (80% = maxLTV/100)
-        if(_getUserLiquidityPriceUSD(user).lte((UD60x18.wrap((amount+ userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(gho).decimals()))).mul(maxLTVUD60x18))){ 
+        if(_getUserLiquidityPriceUSD(user).lte((UD60x18.wrap((amount+ userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(gho).decimals()))).div(maxLTVUD60x18))){ 
             revert("user LTV is superior to maximum LTV"); //TODO add proper error message
         }
         userPosition[user].debt =  userPosition[user].debt + amount;
+        console2.log("user debt after borrow %e", userPosition[user].debt);
         IGhoToken(gho).mint(user, amount);
     
     }
@@ -442,13 +446,19 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         UD60x18 token0amountUD60x18 = UD60x18.wrap(token0amount).div(UD60x18.wrap(10**ERC20(Currency.unwrap(key.currency0)).decimals()));
         UD60x18 token1amountUD60x18 = UD60x18.wrap(token1amount).div(UD60x18.wrap(10**ERC20(Currency.unwrap(key.currency1)).decimals()));
 
+        console2.log("token0 amount %e", token0amountUD60x18.unwrap());
+        console2.log("token1 amount %e", token1amountUD60x18.unwrap());
+
         //Price feed from Chainlink, convert to UD60x18 to avoid overflow errors
         UD60x18 ETHPrice = UD60x18.wrap(uint256(ETHPriceFeed.latestAnswer())).div(UD60x18.wrap(10**ETHPriceFeed.decimals()));
         UD60x18 USDCPrice = UD60x18.wrap(uint256(USDCPriceFeed.latestAnswer())).div(UD60x18.wrap(10**USDCPriceFeed.decimals()));
 
         //Price value of each token in the position
-        UD60x18 token0Price = token0amountUD60x18.mul(ETHPrice);
-        UD60x18 token1Price = token1amountUD60x18.mul(USDCPrice);
+        UD60x18 token0Price = token0amountUD60x18.mul(USDCPrice);
+        UD60x18 token1Price = token1amountUD60x18.mul(ETHPrice);
+
+        console2.log("token0 price %e", token0Price.unwrap());
+        console2.log("token1 price %e", token1Price.unwrap());
       
         //return price value of the position as UD60x18
         return token0Price.add(token1Price);

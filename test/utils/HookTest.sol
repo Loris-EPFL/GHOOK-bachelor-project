@@ -49,6 +49,7 @@ contract HookTest is Test {
 
         // pools alphabetically sort tokens by address
         // so align `token0` with `pool.token0` for consistency
+
         if (address(_tokenA) < address(_tokenB)) {
             token0 = _tokenA;
             token1 = _tokenB;
@@ -56,6 +57,8 @@ contract HookTest is Test {
             token0 = _tokenB;
             token1 = _tokenA;
         }
+        
+
         manager = new PoolManager(500000);
 
         // Helpers for interacting with the pool
