@@ -8,6 +8,11 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {EtherUtils} from "./EtherUtils.sol";
 import {console2} from "forge-std/console2.sol";
 import {IQuoterV2} from "./uniswap/IQuoterV2.sol";
+import {TransferHelper} from "v4-periphery/libraries/TransferHelper.sol";
+import {IERC20Minimal} from "@uniswap/v4-core/contracts/interfaces/external/IERC20Minimal.sol";
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
+
+ 
 
 /// @title AUniswap
 /// @author centonze.eth
@@ -23,7 +28,11 @@ abstract contract AUniswap is EtherUtils {
 
     address GHO = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f;
     address USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    uint24 fee1 = 500; //fee tier of 0.05%
+
+    address DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+
+
+    uint24 fee1 = 3000; //fee tier of 0.05%
     uint24 fee2 = 500; //fee tier of 0.05%
 
     /// @notice Emitted when the Uniswap router address is updated.
@@ -70,16 +79,43 @@ abstract contract AUniswap is EtherUtils {
     /// @param minAmountOut The minimum amount of GHO expected in return.
     /// @return amountOut The amount of DAI received from the swap.
     function _swapWETHtoGHO(uint256 amountIn, uint256 minAmountOut) internal returns (uint256 amountOut) {
-        ISwapRouter.ExactOutputParams memory params = ISwapRouter.ExactOutputParams({
-            path: abi.encodePacked(GHO, fee1, USDC, fee2, WETH),
-            recipient: msg.sender, // Receiver of the swapped tokens
-            deadline: block.timestamp, // Swap has to be terminated at block time
-            amountOut: minAmountOut, // The exact amount to swap
-            amountInMaximum: amountIn // Quote is given by frontend to ensure slippage is minimised
+        ISwapRouter.ExactInputParams memory params =
+            ISwapRouter.ExactInputParams({
+                path: abi.encodePacked(WETH, fee1, USDC, fee2, DAI),
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: minAmountOut
         });
 
-        amountOut = swapRouter.exactOutput(params);
+        amountOut = swapRouter.exactInput(params);
     }
+
+     function _swapExactInputMultihop(uint256 amountIn) internal returns (uint256 amountOut) {
+        // Transfer `amountIn` of DAI to this contract.
+        bool isSuccess = IERC20(WETH).transferFrom(msg.sender, address(this), amountIn);
+
+        // Approve the router to spend DAI.
+        IERC20(WETH).approve(address(swapRouter), amountIn);
+
+        console2.log("msg sender", msg.sender);
+
+        // Multiple pool swaps are encoded through bytes called a `path`. A path is a sequence of token addresses and poolFees that define the pools used in the swaps.
+        // The format for pool encoding is (tokenIn, fee, tokenOut/tokenIn, fee, tokenOut) where tokenIn/tokenOut parameter is the shared token across the pools.
+        // Since we are swapping DAI to USDC and then USDC to WETH9 the path encoding is (DAI, 0.3%, USDC, 0.3%, WETH9).
+        ISwapRouter.ExactInputParams memory params =
+            ISwapRouter.ExactInputParams({
+                path: abi.encodePacked(WETH, fee1, USDC, fee2, GHO),
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0
+            });
+
+        // Executes the swap.
+        amountOut = swapRouter.exactInput(params);
+    }
+
 
     function _quoteSwapToGHOfromWETH(uint256 amountIn) internal returns (uint256 amountOut, uint256 gasEstimate) {
         (amountOut,,, gasEstimate) =
@@ -109,6 +145,8 @@ abstract contract AUniswap is EtherUtils {
             });
          // Executes the swap 
         amountOut = swapRouter.exactInputSingle(params);
+
+
 
        
     }

@@ -71,7 +71,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         lpm.setPoolKey(poolKey);
         test_addLiquidity();
         console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
-        lpm.borrowGho(1000e18, address(this));
+        lpm.borrowGho(236e18, address(this));
     }
 
     function test_withdrawWhileDebt() public{
@@ -81,7 +81,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         uint256 liquidity = 1e10;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
         console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
-        lpm.borrowGho(3000e18, address(this));
+        lpm.borrowGho(1e18, address(this));
 
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         uint256 balanceBefore = lpm.balanceOf(address(this), position.toTokenId());
@@ -98,7 +98,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
 
         console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
-        lpm.borrowGho(400000e18, address(this)); //max borrow is 5.23e5 usd worth of gho, we borrow 4e5 usd worth of gho
+        lpm.borrowGho(230e18, address(this)); //max borrow is 236 usd worth of gho, we borrow 4e5 usd worth of gho
 
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         uint256 balanceBefore = lpm.balanceOf(address(this), position.toTokenId());

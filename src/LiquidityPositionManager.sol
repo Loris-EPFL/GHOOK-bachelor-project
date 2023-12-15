@@ -161,17 +161,17 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         PoolKey memory key,
         IPoolManager.ModifyPositionParams memory params,
         bytes calldata hookData
-    ) public returns (BalanceDelta delta) {
+    ) external returns (BalanceDelta delta) {
         // checks & effects
         //setOperator(address(this), true); //set this contract as operator to allow minting and burning, plus liquidations
         uint256 tokenId = Position({poolKey: key, tickLower: params.tickLower, tickUpper: params.tickUpper}).toTokenId();
+        console2.log("liquidity delta %e", params.liquidityDelta);
         if (params.liquidityDelta < 0) {
             // only the operator or owner can burn
             if (!(msg.sender == owner || isOperator[owner][msg.sender])){
                 revert InsufficientPermission();
             } 
 
-            bool isUserLiquidable = abi.decode(hookData, (bool)); //checks if the calldata specifies the user is liquidable
             uint256 liquidity = uint256(-params.liquidityDelta);
             console2.log("liquidity to withdraw %e", uint128(liquidity));
             console2.log("can user withdraw ? %s", _canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity)));
@@ -235,6 +235,11 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         bytes calldata hookLiquidationData
     ) external returns (BalanceDelta delta) {
         if (!(msg.sender == owner || isOperator[owner][msg.sender])) revert InsufficientPermission();
+        
+        
+        if(getUserCurrentLTV(owner) < maxLTVUD60x18){
+            revert("User LTV is not at risk of liquidation");
+        }
         //Set Position params to 0 to liquidate
         BorrowerPosition storage currentParams = userPosition[owner];
 
@@ -274,27 +279,45 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         _resetUniswapAllowance(WETH);
 
         
-        uint256 ghoAfterUSDCswap = _swapUSDCToGHO(token1balance, 0); //swap token1 to gho
+        uint256 ghoAfterUSDCswap = 0;
+        uint256 ghoAfterWETHswap = 0;
+        if(token1balance > 0){
+            ghoAfterUSDCswap = _swapUSDCToGHO(token1balance, 0); //swap token1 to gho
+        
+        }
+
+        
+         
         console2.log("GHO balance after USDC swap %e", ghoAfterUSDCswap);
+        
         if(userDebtToRepay > ghoAfterUSDCswap){
             //then we swap the WETH needed to repay the debt
-            uint256 ghoAfterWETHswap = _swapWETHtoGHO(token0balance, userDebtToRepay - ghoAfterUSDCswap  ); //swap WETH to gho
+            ghoAfterWETHswap = _swapExactInputMultihop(token0balance); //swap WETH to gho
+
+            console2.log("GHO balance after WETH swap %e", ghoAfterWETHswap);
+
+            //ghoAfterWETHswap = _swapWETHtoGHO(token0balance, userDebtToRepay - ghoAfterUSDCswap  ); //swap WETH to gho
             console2.log("GHO balance after WETH swap %e", ghoAfterWETHswap);
             if(ghoAfterUSDCswap + ghoAfterWETHswap < userDebtToRepay){
                 revert("Not enough GHO to repay debt"); //todo add proper error message
             }
         }
-
-         console2.log("GHO balance after total swap %e", ERC20(gho).balanceOf(address(this)));  
-
         
+
        
+        console2.log("GHO balance after total swap %e", ERC20(gho).balanceOf(address(this)));  
 
-        
+        uint256 ghoLeftAfterLiquidation = (ghoAfterUSDCswap + ghoAfterWETHswap) - userDebtToRepay; //get gho left after liquidation
 
         // adjust 6909 balances
         _burn(owner, position.toTokenId(), uint256(currentParams.liquidity));
 
+        //burn gho debt
+        IGhoToken(gho).burn(userDebtToRepay);
+        bool liquidationBountySuccess = IERC20(gho).transferFrom(address(this), msg.sender, ghoLeftAfterLiquidation * (100) / 20); //send 20% gho to liquidator as liquidation premium
+        //bool liquidationReturnSucess = IERC20(gho).transferFrom(address(this),address(owner), ghoLeftAfterLiquidation * (100 - 20) / 100); //send 80% gho to owner
+
+        
     }
 
 
@@ -483,11 +506,11 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         return _getUserLiquidityPriceUSD(user).unwrap() / 10**18;
     }
 
-    function getUserCurrentLTV(address user) public view returns (uint256){
+    function getUserCurrentLTV(address user) public view returns (UD60x18){
         UD60x18 userPositionValueUDx60 = _getUserLiquidityPriceUSD(user); //user position value
         UD60x18 userDebtUDx60 = UD60x18.wrap(userPosition[user].debt).div(UD60x18.wrap(10**ERC20(gho).decimals())); //user debt, adjusted to gho decimals
 
-        return userDebtUDx60.div(userPositionValueUDx60).mul(UD60x18.wrap(100)).unwrap(); //return LTV 0 < LTV < 100
+        return userDebtUDx60.div(userPositionValueUDx60); //return LTV 0 < LTV < 100
     }
 
     

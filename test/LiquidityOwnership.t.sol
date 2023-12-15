@@ -20,6 +20,8 @@ import { BorrowHook } from "../../src/hook/BorrowHook.sol";
 import {HookMiner} from "./utils/HookMiner.sol";
 import {Hooks} from "@uniswap/v4-core/contracts/libraries/Hooks.sol";
 import {IGhoToken} from '@aave/gho/gho/interfaces/IGhoToken.sol';
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+ 
 
 
 
@@ -331,6 +333,23 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         
         lpm.setOperator(address(lpm), true);
         vm.stopPrank();
+
+        _mintTo(address(this), 1000000000000000000000e18);
+
+        // First we need two tokens
+        ERC20 token1 = ERC20(Currency.unwrap(poolKey.currency0));
+        ERC20 token2 = ERC20(Currency.unwrap(poolKey.currency1));
+
+        token1.approve(address(manager), type(uint256).max);
+        token2.approve(address(manager), type(uint256).max);
+
+        console2.log("token1 balance: %s", token1.balanceOf(address(this)));
+        console2.log("token2 balance: %s", token2.balanceOf(address(this)));
+
+        //get current price, then swap enough to make pool price go down and liquidate user
+        (uint160 sqrtPriceX96Current, int24 currentTick, , ) = IPoolManager(address(manager)).getSlot0(PoolIdLibrary.toId(poolKey));
+        uint160 maxSlippage = 30;
+        swap(poolKey, 1e18, false, ZERO_BYTES); //false = sell eth for usdc
 
         vm.startPrank(address(lpm));
         lpm.liquidateUser(
