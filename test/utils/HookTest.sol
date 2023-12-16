@@ -49,6 +49,7 @@ contract HookTest is Test {
 
         // pools alphabetically sort tokens by address
         // so align `token0` with `pool.token0` for consistency
+
         if (address(_tokenA) < address(_tokenB)) {
             token0 = _tokenA;
             token1 = _tokenB;
@@ -56,6 +57,8 @@ contract HookTest is Test {
             token0 = _tokenB;
             token1 = _tokenA;
         }
+        
+
         manager = new PoolManager(500000);
 
         // Helpers for interacting with the pool
@@ -107,6 +110,17 @@ contract HookTest is Test {
     
     }
 
+    //helper function to mint tokens
+    function _mintGHOTo( address recipient, uint256 amount) internal{
+        address GHO = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f;
+
+ 
+        //mint Aeth and Ausdc by depositing into pool
+        deal(GHO, recipient, amount);
+
+    
+    }
+
 
     //Helper function to add hook as faciliator
     function AddFacilitator(address faciliator) internal{
@@ -117,7 +131,7 @@ contract HookTest is Test {
 
         
         address hookAddress = address(this);
-        uint128 bucketCapacity = 100000e18;
+        uint128 bucketCapacity = 1000000e18; //1 million GHO
         vm.startPrank(whitelistedManager);
         IGhoToken(gho).addFacilitator(faciliator, "BorrowHook", bucketCapacity);
        

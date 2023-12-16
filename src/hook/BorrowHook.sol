@@ -128,7 +128,7 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
     {
 
         
-
+        /*
         if(params.liquidityDelta < 0 ){
             //If user try to withdraw (delta negative) and has debt, revert
             uint256 liquidity = uint256(-params.liquidityDelta);
@@ -136,11 +136,8 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
             if(!_canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity))){
                  revert("Cannot Withdraw because LTV is inferior to min LTV"); //todo allow partial withdraw according to debt
             }
-
-
-            
-
         }
+        */
 
         console2.log("beforeModifyPosition");
         return IHooks.beforeModifyPosition.selector;
@@ -159,7 +156,9 @@ contract BorrowHook is BaseHook, IHookFeeManager, IDynamicFeeManager {
         returns (bytes4)
     {
         //store user position
+        /*
         _storeUserPosition(owner, params);
+        */
         console2.log("userPosition in usd %e", _getUserLiquidityPriceUSD(owner).unwrap() / 10**18);
         console2.log("afterModifyPosition");
         return IHooks.afterModifyPosition.selector;

@@ -35,12 +35,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
 
     function setUp() public {
         HookTest.initHookTestEnv();
-
-        lpm = new LiquidityPositionManager(IPoolManager(address(manager)));
-        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
-
-        token0.approve(address(lpm), type(uint256).max);
-        token1.approve(address(lpm), type(uint256).max);
+        address owner = makeAddr("owner");
 
         uint160 flags = uint160(
            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_MODIFY_POSITION_FLAG
@@ -51,23 +46,67 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
 
-        AddFacilitator(address(deployedHooks));
+        console2.log("deployedHooks: %s", address(deployedHooks));
 
         // Create the pool
         poolKey =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
+            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 300, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
+         
+        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner, poolKey);
+        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
+
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
+        AddFacilitator(address(lpm)); //whitelist lpm to mint gho
+
+        token0.approve(address(lpm), type(uint256).max);
+        token1.approve(address(lpm), type(uint256).max);
+
 
         _mintTokens(1000000000000000000000e18);
 
       
     }
 
+    function test_borrow() public{
+        test_addLiquidity();
+        console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
+        lpm.borrowGho(236e18, address(this));
+    }
+
+    function test_withdrawWhileDebt() public{
+        int24 tickLower = -600;
+        int24 tickUpper = 600;
+        uint256 liquidity = 1e10;
+        addLiquidity(poolKey, tickLower, tickUpper, liquidity);
+        console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
+        lpm.borrowGho(1e18, address(this));
+
+        Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
+        uint256 balanceBefore = lpm.balanceOf(address(this), position.toTokenId());
+        removeLiquidity(poolKey, tickLower, tickUpper, liquidity / 2); // remove half of the position
+
+    }
+
+    function test_withdrawWhileTooMuchDebt() public{
+       
+        int24 tickLower = -600;
+        int24 tickUpper = 600;
+        uint256 liquidity = 1e10;
+        addLiquidity(poolKey, tickLower, tickUpper, liquidity);
+
+        console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
+        lpm.borrowGho(230e18, address(this)); //max borrow is 236 usd worth of gho, we borrow 4e5 usd worth of gho
+
+        Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
+        uint256 balanceBefore = lpm.balanceOf(address(this), position.toTokenId());
+        removeLiquidity(poolKey, tickLower, tickUpper, liquidity / 2); // remove half of the position
+    }
+
     function test_addLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e4;
+        uint256 liquidity = 1e10;
 
         console2.log("token0 balance before", token0.balanceOf(address(this)));
         console2.log("token1 balance before", token1.balanceOf(address(this)));
@@ -82,6 +121,8 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
             }),
             ZERO_BYTES
         );
+        uint128 liquidityTest = manager.getLiquidity(poolKey.toId(),address(lpm), tickLower, tickUpper);
+        console2.log("liquidity for test borrow %e", liquidityTest);
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         assertEq(lpm.balanceOf(address(this), position.toTokenId()), liquidity);
     }
@@ -89,7 +130,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_removeFullLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e4;
+        uint256 liquidity = 1e10;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});
         assertEq(lpm.balanceOf(address(this), position.toTokenId()), liquidity);
@@ -109,7 +150,7 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     function test_removePartialLiquidity() public {
         int24 tickLower = -600;
         int24 tickUpper = 600;
-        uint256 liquidity = 1e4;
+        uint256 liquidity = 1e10;
         addLiquidity(poolKey, tickLower, tickUpper, liquidity);
 
         Position memory position = Position({poolKey: poolKey, tickLower: tickLower, tickUpper: tickUpper});

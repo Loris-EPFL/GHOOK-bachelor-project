@@ -39,12 +39,7 @@ contract TokenFlowsTest is HookTest, Deployers {
 
     function setUp() public {
         HookTest.initHookTestEnv();
-
-        lpm = new LiquidityPositionManager(IPoolManager(address(manager)));
-        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
-
-        token0.approve(address(lpm), type(uint256).max);
-        token1.approve(address(lpm), type(uint256).max);
+        address owner = makeAddr("owner");
 
         uint160 flags = uint160(
            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_MODIFY_POSITION_FLAG
@@ -55,7 +50,6 @@ contract TokenFlowsTest is HookTest, Deployers {
         deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
 
-        AddFacilitator(address(deployedHooks));
         
 
         // Create the pool
@@ -63,6 +57,15 @@ contract TokenFlowsTest is HookTest, Deployers {
             PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
+
+        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner, poolKey);
+        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
+
+        token0.approve(address(lpm), type(uint256).max);
+        token1.approve(address(lpm), type(uint256).max);
+
+        AddFacilitator(address(deployedHooks));
+
 
         _mintTokens(1000000e18);
         _mintTo(alice, 1000000000000000000000e18);
