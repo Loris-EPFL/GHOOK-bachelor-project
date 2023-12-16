@@ -155,7 +155,7 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
     ) external returns (BalanceDelta delta) {
         // checks & effects
         //if user don't exist yet, add him to the list
-        if(users.get(owner) != false){
+        if(users.get(owner) != true){
            users.set(owner, true);
         }
 
@@ -174,8 +174,8 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
             if(!_canUserWithdraw(owner, params.tickLower, params.tickUpper, uint128(liquidity))){
                 revert("Cannot Withdraw because LTV is inferior to min LTV"); //todo allow partial withdraw according to debt
             }
-
-
+            
+            //recreate new position with new liquidity
             userPosition[owner] = BorrowerPosition(Position({poolKey: key, tickLower: params.tickLower, tickUpper: params.tickUpper}), uint128(userPosition[owner].liquidity - liquidity), userPosition[owner].debt); //todo check if this is the right way to remove user position
             _burn(owner, tokenId, uint256(-params.liquidityDelta));
             
@@ -240,8 +240,6 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
 
         uint8 liquidationPremium = 20; //20% of GHO debt to liquidator
 
-
-
         //get user Current Position and debt
         BorrowerPosition storage currentParams = userPosition[owner];
 
@@ -267,7 +265,7 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
             tickLower: currentParams.position.tickLower,
             tickUpper: currentParams.position.tickUpper,
             liquidityDelta: -int256(int128(currentParams.liquidity))
-        });//todo check safe conversion ?
+        });
 
        uint256 token0balance = ERC20(WETH).balanceOf(address(this));
        uint256 token1balance = ERC20(USDC).balanceOf(address(this));
@@ -338,12 +336,10 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         if(amount < minBorrowAmount){
             revert("Borrow amount to borrow is inferior to 1 GHO");
         }
-        //TODO : implement logic to check if user has enough collateral to borrow
         console2.log("Borrow amount requested %e", amount);    
-        console2.log("user collateral value in USD %e", _getUserLiquidityPriceUSD(user).unwrap() / 10**18);
+        console2.log("User collateral value in USD %e", _getUserLiquidityPriceUSD(user).unwrap() / 10**18);
         console2.log("Max borrow amount %e", _getUserLiquidityPriceUSD(user).sub((UD60x18.wrap(userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(GHO).decimals()))).mul(maxLTVUD60x18).unwrap());
-        console2.log("user collateral value in USD %e", _getUserLiquidityPriceUSD(user).unwrap() / 10**18);
-        console2.log("ahhhh %e", (UD60x18.wrap((amount+ userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(GHO).decimals()))).div(maxLTVUD60x18).unwrap());
+
         //get user position price in USD, then check if borrow amount + debt already owed (adjusted to GHO decimals) is inferior to maxLTV (80% = maxLTV/100)
         if(_getUserLiquidityPriceUSD(user).lte((UD60x18.wrap((amount+ userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(GHO).decimals()))).div(maxLTVUD60x18))){ 
             revert("user LTV is superior to maximum LTV"); //TODO add proper error message
@@ -377,7 +373,6 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
     }
 
     function _getUserLiquidityPriceUSD(address user) internal view returns (UD60x18){
-        
         BorrowerPosition memory borrowerPosition = userPosition[user];
         Position memory positionParams = borrowerPosition.position;
         PoolKey memory key = positionParams.poolKey;
@@ -390,8 +385,6 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
 
 
     function _getPositionUsdPrice(int24 tickLower, int24 tickUpper, uint128 liquidity, PoolKey memory key) internal view returns (UD60x18){
-        //PoolKey memory key = _getPoolKey();
-
         (uint160 sqrtPriceX96, int24 currentTick, ,  ) = manager.getSlot0(key.toId()); //curent price and tick of the pool
         
         //Lower and Upper tick of the position
@@ -458,9 +451,6 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
 
     }
 
-
-
-
     function getUserPositonPriceUSD(address user) public view returns (uint256){
         return _getUserLiquidityPriceUSD(user).unwrap() / 10**18;
     }
@@ -487,12 +477,7 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         //Theorically, position value after withdraw should be superior to 0, but we check just in case
         UD60x18 _positionValueAfterWithdraw = _getUserLiquidityPriceUSD(user).gte(_getPositionUsdPrice(tickLower, tickUpper, liquidity, key)) ? _getUserLiquidityPriceUSD(user).sub(_getPositionUsdPrice(tickLower, tickUpper, liquidity, key)) : UD60x18.wrap(0);
         UD60x18 userDebt = UD60x18.wrap(userPosition[user].debt).div(UD60x18.wrap(10**ERC20(GHO).decimals()));
-        /*
-        console2.log("position value after withdraw %e", _positionValueAfterWithdraw.unwrap());
-        console2.log("ltv is %e", maxLTVUD60x18.unwrap());
-        console2.log("user debt USD %e", userDebt.unwrap() );
-        console2.log("withdraw ltv calc %s", userDebt.div(_positionValueAfterWithdraw).lte(maxLTVUD60x18));
-        */
+       
         if(_positionValueAfterWithdraw.isZero() && userPosition[user].debt == 0){
             //If user has no debt and withdraw all his position, he can withdraw
             return true;
@@ -530,11 +515,13 @@ contract LiquidityPositionManager is ERC6909, AUniswap{
         return poolKey;
     }
 
-    function getLiquidableUsers() public view returns (address[] memory){
-        address[] memory liquidableUsers;
+    function getLiquidableUsers(uint n) public view returns (address[] memory){
+        //get n first liquidable users
+        address[] memory liquidableUsers = new address[](n);
         //loop through users, see if they are liquidable
         uint24 liquidableUsersCount = 0;
          for (uint i = 0; i < users.size(); i++) {
+            console2.log("user %s LTV is %e", users.getKeyAtIndex(i), getUserCurrentLTV(users.getKeyAtIndex(i)).unwrap());
            if(getUserCurrentLTV(users.getKeyAtIndex(i)) >= maxLTVUD60x18){
                 console2.log("user %s is liquidable", users.getKeyAtIndex(i));
                 liquidableUsers[liquidableUsersCount] = (users.getKeyAtIndex(i));

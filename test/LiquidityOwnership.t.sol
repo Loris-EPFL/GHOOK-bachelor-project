@@ -53,17 +53,10 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     function setUp() public {
         HookTest.initHookTestEnv();
 
-        //address owner = 0x388C818CA8B9251b393131C08a736A67ccB19297; //address of owner of hook
         address owner = makeAddr("owner");
-
-        
 
         console2.log("token0: %s", address(token0)); 
         console2.log("token1: %s", address(token1));
-
-       
-
-        
 
         uint160 flags = uint160(
            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_MODIFY_POSITION_FLAG
@@ -334,7 +327,6 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         assertEq(lpm.balanceOf(alice, position.toTokenId()), liquidity);
 
         lpm.borrowGho(236e18, alice);
-
         
         lpm.setOperator(address(lpm), true);
         vm.stopPrank();
@@ -359,6 +351,12 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         vm.startPrank(address(bob));
         ERC20(GHO).approve(address(lpm), type(uint256).max);
         _mintGHOTo(address(bob), 237e18);
+
+        address[] memory liquidableUsers = lpm.getLiquidableUsers(4);
+        
+        for(uint i = 0; i < liquidableUsers.length; i++){
+            console2.log("liquidable user: %s", liquidableUsers[i]);
+        }
 
         console2.log("ETH balance before liquidation: %e", ERC20(WETH).balanceOf(address(bob)));
         console2.log("USDC balance before liquidation: %e", ERC20(USDC).balanceOf(address(bob)));
