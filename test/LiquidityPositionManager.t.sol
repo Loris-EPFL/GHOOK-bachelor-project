@@ -37,12 +37,6 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         HookTest.initHookTestEnv();
         address owner = makeAddr("owner");
 
-        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner);
-        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
-
-        token0.approve(address(lpm), type(uint256).max);
-        token1.approve(address(lpm), type(uint256).max);
-
         uint160 flags = uint160(
            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_MODIFY_POSITION_FLAG
                 | Hooks.AFTER_MODIFY_POSITION_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_DONATE_FLAG | Hooks.AFTER_DONATE_FLAG
@@ -52,15 +46,22 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
         deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
 
-        AddFacilitator(address(lpm)); //whitelist lpm to mint gho
-
         console2.log("deployedHooks: %s", address(deployedHooks));
 
         // Create the pool
         poolKey =
             PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 300, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
+         
+        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner, poolKey);
+        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
+
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
+        AddFacilitator(address(lpm)); //whitelist lpm to mint gho
+
+        token0.approve(address(lpm), type(uint256).max);
+        token1.approve(address(lpm), type(uint256).max);
+
 
         _mintTokens(1000000000000000000000e18);
 
@@ -68,14 +69,12 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     }
 
     function test_borrow() public{
-        lpm.setPoolKey(poolKey);
         test_addLiquidity();
         console2.log("test liquidity is %e", lpm.getLiquidityforUser(address(this)));
         lpm.borrowGho(236e18, address(this));
     }
 
     function test_withdrawWhileDebt() public{
-        lpm.setPoolKey(poolKey);
         int24 tickLower = -600;
         int24 tickUpper = 600;
         uint256 liquidity = 1e10;
@@ -90,7 +89,6 @@ contract LiquidityPositionManagerTest is HookTest, Deployers {
     }
 
     function test_withdrawWhileTooMuchDebt() public{
-        lpm.setPoolKey(poolKey);
        
         int24 tickLower = -600;
         int24 tickUpper = 600;

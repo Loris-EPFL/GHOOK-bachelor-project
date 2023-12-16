@@ -32,7 +32,7 @@ abstract contract AUniswap is EtherUtils {
     address DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
 
 
-    uint24 fee1 = 3000; //fee tier of 0.05%
+    uint24 fee1 = 500; //fee tier of 0.05%
     uint24 fee2 = 500; //fee tier of 0.05%
 
     /// @notice Emitted when the Uniswap router address is updated.
@@ -109,7 +109,7 @@ abstract contract AUniswap is EtherUtils {
                 recipient: msg.sender,
                 deadline: block.timestamp,
                 amountIn: amountIn,
-                amountOutMinimum: 0
+                amountOutMinimum: 1
             });
 
         // Executes the swap.
@@ -125,6 +125,30 @@ abstract contract AUniswap is EtherUtils {
     function _quoteSwapToGHOfromUSDC(uint256 amountIn) internal returns (uint256 amountOut, uint256 gasEstimate) {
         (amountOut,,, gasEstimate) =
             quoteRouter.quoteExactOutput(bytes(abi.encodePacked(GHO, fee1, USDC)), amountIn);
+    }
+
+     /// @dev Converts a given amount of DAI into GHO using Uniswap.
+    /// @param amountIn The amount of token to be swapped.
+    /// @return amountOut The amount of USDC required from the swap.
+    function _swapWETHToUSDC(uint256 amountIn, uint256 minAmountOut) internal returns (uint256 amountOut) {
+
+        ISwapRouter.ExactInputSingleParams memory params =
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: WETH,
+                tokenOut: USDC,
+                fee: fee1,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: minAmountOut,
+                sqrtPriceLimitX96: 0
+            });
+         // Executes the swap 
+        amountOut = swapRouter.exactInputSingle(params);
+
+
+
+       
     }
 
     /// @dev Converts a given amount of DAI into GHO using Uniswap.

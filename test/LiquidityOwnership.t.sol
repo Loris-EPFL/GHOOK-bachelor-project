@@ -46,22 +46,22 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
     address alice = makeAddr("ALICE");
     address bob = makeAddr("BOB");
 
+    address GHO = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f;
+    
+
+
     function setUp() public {
         HookTest.initHookTestEnv();
 
         //address owner = 0x388C818CA8B9251b393131C08a736A67ccB19297; //address of owner of hook
         address owner = makeAddr("owner");
 
-
-
-        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner);
-        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
+        
 
         console2.log("token0: %s", address(token0)); 
         console2.log("token1: %s", address(token1));
 
-        token0.approve(address(lpm), type(uint256).max);
-        token1.approve(address(lpm), type(uint256).max);
+       
 
         
 
@@ -74,8 +74,6 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         deployedHooks = new BorrowHook{salt: salt}(address(owner),IPoolManager(address(manager)));
         require(address(deployedHooks) == hookAddress, "CounterTest: hook address mismatch");
 
-        AddFacilitator(address(lpm));
-
         console2.log("deployedHooks: %s", address(deployedHooks));
         
 
@@ -84,6 +82,15 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
             PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 300, 60, IHooks(address(deployedHooks)));
         poolId = poolKey.toId();
         manager.initialize(poolKey, SQRT_RATIO_1_1, ZERO_BYTES);
+
+        lpm = new LiquidityPositionManager(IPoolManager(address(manager)), owner, poolKey);
+        helper = new LiquidityHelpers(IPoolManager(address(manager)), lpm);
+
+        AddFacilitator(address(lpm));
+
+        token0.approve(address(lpm), type(uint256).max);
+        token1.approve(address(lpm), type(uint256).max);
+
 
         _mintTokens(1000000000000000000000e18);
         _mintTo(alice, 1000000000000000000000e18);
@@ -311,7 +318,6 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         int24 tickUpper = 600;
         uint256 liquidity = 1e10;
 
-        lpm.setPoolKey(poolKey);
 
         vm.startPrank(alice);
         lpm.modifyPosition(
@@ -329,7 +335,6 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
 
         lpm.borrowGho(236e18, alice);
 
-        // alice allows bob as an operator
         
         lpm.setOperator(address(lpm), true);
         vm.stopPrank();
@@ -351,12 +356,25 @@ contract LiquidityOwnershipTest is HookTest, Deployers {
         uint160 maxSlippage = 30;
         swap(poolKey, 1e18, false, ZERO_BYTES); //false = sell eth for usdc
 
-        vm.startPrank(address(lpm));
+        vm.startPrank(address(bob));
+        ERC20(GHO).approve(address(lpm), type(uint256).max);
+        _mintGHOTo(address(bob), 237e18);
+
+        console2.log("ETH balance before liquidation: %e", ERC20(WETH).balanceOf(address(bob)));
+        console2.log("USDC balance before liquidation: %e", ERC20(USDC).balanceOf(address(bob)));
+        console2.log("GHO balance before liquidation: %e", ERC20(GHO).balanceOf(address(bob)));
+
+        
         lpm.liquidateUser(
-            alice, // lpm has operator permissions to close alice's LP
+            alice, // bob has operator permissions to close alice's LP
             position,
             ZERO_BYTES
         );
+        console2.log("ETH balance after liquidation: %e", ERC20(WETH).balanceOf(address(bob)));
+        console2.log("USDC balance after liquidation: %e", ERC20(USDC).balanceOf(address(bob)));
+        console2.log("GHO balance after liquidation: %e", ERC20(GHO).balanceOf(address(bob)));
+
+
         vm.stopPrank();
 
         // alice's LP is closed

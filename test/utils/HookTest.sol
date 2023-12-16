@@ -110,6 +110,17 @@ contract HookTest is Test {
     
     }
 
+    //helper function to mint tokens
+    function _mintGHOTo( address recipient, uint256 amount) internal{
+        address GHO = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f;
+
+ 
+        //mint Aeth and Ausdc by depositing into pool
+        deal(GHO, recipient, amount);
+
+    
+    }
+
 
     //Helper function to add hook as faciliator
     function AddFacilitator(address faciliator) internal{
