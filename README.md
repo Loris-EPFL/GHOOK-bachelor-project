@@ -13,6 +13,9 @@ forge install saucepoint/bungi
 This project is part of my Bachelor's project at the Distributed Computing Laboratory of EPFL.
 See the full report in GHOOK_Bachelor_Project_Report pdf.
 
+[GHOOK_Bachelor_Project_Report.pdf](https://github.com/Loris-EPFL/bungi-position-manager-hook/files/13778277/GHOOK_Bachelor_Project_Report.pdf)
+
+
 
 # Features
 
