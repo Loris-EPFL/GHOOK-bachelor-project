@@ -1,5 +1,5 @@
-# 🅱️ungi
-### **An experimental Liquidity Position Manager for Uniswap v4 🦄**
+# 🇬HOOk
+### **An experimental Liquidity Position Manager for Uniswap v4 that allows a user to mint GHO**
 
 > The codebase is tested on happy paths only. This should not be used in any production capacity
 
@@ -10,12 +10,16 @@ forge install saucepoint/bungi
 
 ---
 
+This project is part of my Bachelor's project at the Distributed Computing Laboratory of EPFL.
+See the full report in GHOOK_Bachelor_Project_Report pdf.
+
+
 # Features
 
 Until Uniswap Labs releases a canonical LP router (equivalent to v3's [NonfungiblePositionManager](https://github.com/Uniswap/v3-periphery/blob/main/contracts/NonfungiblePositionManager.sol)), there was a growing need for **an advanced LP router** with more features than the baseline [PoolModifyPositionTest](https://github.com/Uniswap/v4-core/blob/main/contracts/test/PoolModifyPositionTest.sol)
 
 
-## 🅱️ungi's liquidity position manager (LPM) supports:
+## 🇬HOOK liquidity position manager (LPM) supports:
 
 
 - [x] Semi-fungible LP tokens ([ERC-6909](https://github.com/jtriley-eth/ERC-6909))
@@ -25,11 +29,7 @@ Until Uniswap Labs releases a canonical LP router (equivalent to v3's [Nonfungib
 - [x] Permissioned operators and managers. Delegate to a trusted party to manage your liquidity positions
     - **Allow a hook to modify and adjust your position(s)!**
 
-- [ ] Fee accounting and collection (TODO)
-
-- [ ] Swap-n-add (TODO)
-
-- [ ] Fuzz testing (TODO)
+- Mint GHO against your LP
 
 
 ---
