@@ -105,6 +105,28 @@ Remove Liquidity
     );
 ```
 
+Mint GHO (need enough liquidity first)
+```solidity
+function borrowGho(uint256 amount, address user) public returns (bool, uint256){
+        //if amount is inferior to min amount, revert
+        if(amount < minBorrowAmount){
+            revert("Borrow amount to borrow is inferior to 1 GHO");
+        }
+        console2.log("Borrow amount requested %e", amount);    
+        console2.log("User collateral value in USD %e", _getUserLiquidityPriceUSD(user).unwrap() / 10**18);
+        console2.log("Max borrow amount %e", _getUserLiquidityPriceUSD(user).sub((UD60x18.wrap(userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(GHO).decimals()))).mul(maxLTVUD60x18).unwrap());
+
+        //get user position price in USD, then check if borrow amount + debt already owed (adjusted to GHO decimals) is inferior to maxLTV (80% = maxLTV/100)
+        if(_getUserLiquidityPriceUSD(user).lte((UD60x18.wrap((amount+ userPosition[user].debt)).div(UD60x18.wrap(10**ERC20(GHO).decimals()))).div(maxLTVUD60x18))){ 
+            revert("user LTV is superior to maximum LTV"); //TODO add proper error message
+        }
+        userPosition[user].debt =  userPosition[user].debt + amount;
+        console2.log("user debt after borrow %e", userPosition[user].debt);
+        IGhoToken(GHO).mint(user, amount);
+    }
+```
+
+
 Rebalance Liquidity
 ```solidity
     // lens-style contract to help with liquidity math
