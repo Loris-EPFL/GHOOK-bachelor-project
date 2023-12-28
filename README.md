@@ -3,10 +3,6 @@
 
 > The codebase is tested on happy paths only. This should not be used in any production capacity
 
-Add it to your project
-```bash
-forge install saucepoint/bungi
-```
 
 ---
 
